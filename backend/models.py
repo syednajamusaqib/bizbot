@@ -19,15 +19,17 @@ from sqlalchemy import (
 from sqlalchemy.orm import relationship
 
 from database import Base
-
+from datetime import datetime, timezone
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, JSON, Boolean, Enum as SQLEnum
+from sqlalchemy.orm import relationship
+import enum
 
 # =========================
 # TIME UTILITIES
 # =========================
 def utcnow():
     """Return current UTC time without timezone info."""
-    return datetime.now(timezone.utc).replace(tzinfo=None)
-
+    return datetime.utcnow()
 
 # =========================
 # USER MODEL
@@ -177,11 +179,92 @@ from database import get_db  # Ensure your database.py defines get_db
 
 router = APIRouter(prefix="/workflows", tags=["Workflows"])
 
-# =========================
-# SCHEMAS (Pydantic Models)
-# =========================
+class PostPlatform(str, enum.Enum):
+    INSTAGRAM = "instagram"
+    FACEBOOK = "facebook"
+    TWITTER = "twitter"
+    LINKEDIN = "linkedin"
+
+class PostStatus(str, enum.Enum):
+    PENDING = "pending"
+    APPROVED = "approved"
+    SCHEDULED = "scheduled"
+    PUBLISHED = "published"
+    REJECTED = "rejected"
+
+class SocialMediaPost(Base):
+    __tablename__ = "social_media_posts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)  # This references existing users table
+    
+    platform = Column(SQLEnum(PostPlatform), nullable=False)
+    image_url = Column(String, nullable=True)
+    caption = Column(String, nullable=False)
+    hashtags = Column(JSON, default=[])  # List of hashtags
+    
+    status = Column(SQLEnum(PostStatus), default=PostStatus.PENDING)
+    
+    scheduled_time = Column(DateTime, nullable=True)
+    published_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+    
+    # For tracking changes/revisions
+    original_caption = Column(String, nullable=True)
+    revision_history = Column(JSON, default=[])  # Store revision history
+    
+    # Source of the post (studio or manual)
+    source = Column(String, default="studio")
+    
+    
 
 
+# =========================
+# SOCIAL MEDIA NOTIFICATION MODEL
+# =========================
+
+class NotificationType(str, enum.Enum):
+    REVIEW_NEEDED = "review_needed"
+    APPROVED = "approved"
+    SCHEDULED = "scheduled"
+    PUBLISHED = "published"
+    NEW_FROM_STUDIO = "new_from_studio"
+    CHANGES_REQUESTED = "changes_requested"
+
+class SocialMediaNotification(Base):
+    __tablename__ = "social_media_notifications"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)  # References existing users table
+    post_id = Column(Integer, ForeignKey("social_media_posts.id"), nullable=True)
+    
+    type = Column(SQLEnum(NotificationType), nullable=False)
+    message = Column(String, nullable=False)
+    read = Column(Boolean, default=False)
+    
+    extradata = Column(JSON, default={})  # Additional data like platform, reason, etc.
+    
+    created_at = Column(DateTime, default=utcnow)
+    
+    # No back_populates needed
+
+
+# =========================
+# EMAIL LOG MODEL (for tracking sent emails)
+# =========================
+
+class EmailLog(Base):
+    __tablename__ = "email_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    recipient_email = Column(String, nullable=False)
+    subject = Column(String, nullable=False)
+    type = Column(String, nullable=True)  # review, approval, changes, etc.
+    post_id = Column(Integer, nullable=True)
+    status = Column(String, default="sent")  # sent, failed
+    error_message = Column(String, nullable=True)
+    created_at = Column(DateTime, default=utcnow)
 
 
 

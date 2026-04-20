@@ -29,12 +29,14 @@ import {
   Mail,
   Phone,
   MapPin,
+   Clock,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import BotIcon from "@/components/ui/BotIcon";
 import api from "@/lib/api";
+import { socialMediaApi } from "@/services/socialMediaApi";
 
 interface DashboardProps {
   isAuthenticated: boolean;
@@ -45,6 +47,26 @@ interface Workflow {
   name: string;
   status: "active" | "paused" | "error";
   business_id: string;
+}
+
+interface SocialMediaStats {
+  pendingCount: number;
+  approvedCount: number;
+  publishedCount: number;
+  totalCount: number;
+  recentPendingPosts: Array<{
+    id: number;
+    platform: string;
+    caption: string;
+    status: string;
+    scheduled_time?: string;
+  }>;
+  recentPublishedPosts: Array<{
+    id: number;
+    platform: string;
+    caption: string;
+    published_at?: string;
+  }>;
 }
 
 const Dashboard = ({ isAuthenticated }: DashboardProps) => {
@@ -65,6 +87,17 @@ const Dashboard = ({ isAuthenticated }: DashboardProps) => {
   const [userWorkflows, setUserWorkflows] = useState<Workflow[]>([]);
   const [activeWorkflowsCount, setActiveWorkflowsCount] = useState(0);
   const [isLoadingWorkflows, setIsLoadingWorkflows] = useState(true);
+
+  // State for social media posts
+  const [socialMediaStats, setSocialMediaStats] = useState<SocialMediaStats>({
+    pendingCount: 0,
+    approvedCount: 0,
+    publishedCount: 0,
+    totalCount: 0,
+    recentPendingPosts: [],
+    recentPublishedPosts: [],
+  });
+  const [isLoadingSocial, setIsLoadingSocial] = useState(true);
 
   // Fetch user workflows
   useEffect(() => {
@@ -88,6 +121,97 @@ const Dashboard = ({ isAuthenticated }: DashboardProps) => {
     
     if (isAuthenticated) fetchUserWorkflows();
   }, [isAuthenticated]);
+
+  // Fetch social media stats
+  useEffect(() => {
+    const fetchSocialMediaStats = async () => {
+      try {
+        // Get pending posts count
+        const pendingResponse = await socialMediaApi.getPendingCount();
+        const pendingCount = pendingResponse.pending_count || 0;
+        
+        // Get all posts to calculate totals
+        const allPosts = await socialMediaApi.getPosts();
+        const totalCount = allPosts.length;
+        
+        // Get published/approved posts
+        const publishedPosts = await socialMediaApi.getPosts('published');
+        const approvedPosts = await socialMediaApi.getPosts('approved');
+        const publishedCount = publishedPosts.length;
+        const approvedCount = approvedPosts.length;
+        
+        // Get recent pending posts (last 3)
+        const pendingPosts = await socialMediaApi.getPosts('pending');
+        const recentPendingPosts = pendingPosts.slice(0, 3).map((post: any) => ({
+          id: post.id,
+          platform: post.platform,
+          caption: post.caption.substring(0, 50) + (post.caption.length > 50 ? '...' : ''),
+          status: post.status,
+          scheduled_time: post.scheduled_time,
+        }));
+        
+        // Get recent published posts (last 3)
+        const recentPublishedPosts = publishedPosts.slice(0, 3).map((post: any) => ({
+          id: post.id,
+          platform: post.platform,
+          caption: post.caption.substring(0, 50) + (post.caption.length > 50 ? '...' : ''),
+          published_at: post.published_at || post.approved_at,
+        }));
+        
+        setSocialMediaStats({
+          pendingCount,
+          approvedCount: approvedCount + publishedCount,
+          publishedCount,
+          totalCount,
+          recentPendingPosts,
+          recentPublishedPosts,
+        });
+      } catch (error) {
+        console.error("Failed to load social media stats", error);
+        // Use localStorage fallback
+        const pendingCount = parseInt(localStorage.getItem('pending_posts_count') || '0', 10);
+        setSocialMediaStats(prev => ({
+          ...prev,
+          pendingCount,
+        }));
+      } finally {
+        setIsLoadingSocial(false);
+      }
+    };
+    
+    if (isAuthenticated) fetchSocialMediaStats();
+  }, [isAuthenticated]);
+
+  // Listen for updates from social media modules
+  useEffect(() => {
+    const handlePendingReviewsUpdate = () => {
+      // Refresh stats when pending reviews are updated
+      const fetchUpdatedStats = async () => {
+        try {
+          const pendingResponse = await socialMediaApi.getPendingCount();
+          const allPosts = await socialMediaApi.getPosts();
+          const publishedPosts = await socialMediaApi.getPosts('published');
+          const approvedPosts = await socialMediaApi.getPosts('approved');
+          
+          setSocialMediaStats(prev => ({
+            ...prev,
+            pendingCount: pendingResponse.pending_count || 0,
+            totalCount: allPosts.length,
+            approvedCount: approvedPosts.length + publishedPosts.length,
+            publishedCount: publishedPosts.length,
+          }));
+        } catch (error) {
+          console.error("Failed to refresh stats", error);
+        }
+      };
+      fetchUpdatedStats();
+    };
+    
+    window.addEventListener('pendingReviewsUpdated', handlePendingReviewsUpdate);
+    return () => {
+      window.removeEventListener('pendingReviewsUpdated', handlePendingReviewsUpdate);
+    };
+  }, []);
 
   useEffect(() => {
     const fetchUserProfile = async () => {
@@ -149,12 +273,19 @@ const Dashboard = ({ isAuthenticated }: DashboardProps) => {
       title: "Social Media Manager",
       description: "Generate and schedule social content",
       icon: Share2,
-      metric: "587",
-      metricLabel: "Posts Scheduled / Week",
+      metric: isLoadingSocial ? "..." : `${socialMediaStats.publishedCount} / ${socialMediaStats.pendingCount}`,
+      metricLabel: "Published / Pending",
       gradient: "from-social to-social/80",
       action: () => navigate("/social-media-studio"),
       actionLabel: "Launch Studio",
-      platforms: ["Facebook", "Twitter", "LinkedIn", "Instagram"],
+      platforms: ["Instagram", "Facebook", "Twitter", "LinkedIn"],
+      showPostsList: true,
+      pendingPosts: socialMediaStats.recentPendingPosts,
+      publishedPosts: socialMediaStats.recentPublishedPosts,
+      totalPosts: socialMediaStats.totalCount,
+      approvedCount: socialMediaStats.approvedCount,
+      pendingCount: socialMediaStats.pendingCount,
+      publishedCount: socialMediaStats.publishedCount,
     },
     {
       title: "Workflow Automation",
@@ -163,9 +294,8 @@ const Dashboard = ({ isAuthenticated }: DashboardProps) => {
       metric: isLoadingWorkflows ? "..." : activeWorkflowsCount.toString(),
       metricLabel: "Active Workflows",
       gradient: "from-workflow to-workflow/80",
-     action: () => navigate("/user-workflows"), 
+      action: () => navigate("/user-workflows"), 
       actionLabel: "View Workflows",
-      // Add workflows data for display
       userWorkflows: userWorkflows,
       showWorkflowsList: true,
     },
@@ -326,6 +456,73 @@ const Dashboard = ({ isAuthenticated }: DashboardProps) => {
                           {platform}
                         </span>
                       ))}
+                    </div>
+                  )}
+
+                  {/* Show Social Media Posts List */}
+                  {card.showPostsList && (
+                    <div className="space-y-3 mb-4">
+                      {isLoadingSocial ? (
+                        <div className="text-sm text-muted-foreground">Loading posts...</div>
+                      ) : (
+                        <>
+                          {/* Summary Stats */}
+                          <div className="grid grid-cols-2 gap-2 mb-3">
+                            <div className="bg-green-50 rounded-lg p-2 text-center">
+                              <div className="text-xl font-bold text-green-600">{card.publishedCount || 0}</div>
+                              <div className="text-xs text-green-600">Published</div>
+                            </div>
+                            <div className="bg-amber-50 rounded-lg p-2 text-center">
+                              <div className="text-xl font-bold text-amber-600">{card.pendingCount || 0}</div>
+                              <div className="text-xs text-amber-600">Pending</div>
+                            </div>
+                          </div>
+                          
+                          {/* Published Posts Section */}
+                          {card.publishedPosts && card.publishedPosts.length > 0 && (
+                            <div>
+                              <div className="text-xs font-semibold text-green-600 mb-1 flex items-center gap-1">
+                                <CheckCircle className="w-3 h-3" />
+                                Recently Published
+                              </div>
+                              {card.publishedPosts.map((post: any) => (
+                                <div key={post.id} className="flex items-center gap-2 text-sm py-1">
+                                  <div className="w-2 h-2 rounded-full bg-green-500" />
+                                  <span className="text-muted-foreground capitalize text-xs">{post.platform}</span>
+                                  <span className="text-xs text-muted-foreground truncate flex-1">
+                                    {post.caption}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          
+                          {/* Pending Posts Section */}
+                          {card.pendingPosts && card.pendingPosts.length > 0 && (
+                            <div>
+                              <div className="text-xs font-semibold text-amber-600 mb-1 flex items-center gap-1">
+                                <Clock className="w-3 h-3" />
+                                Pending Review
+                              </div>
+                              {card.pendingPosts.map((post: any) => (
+                                <div key={post.id} className="flex items-center gap-2 text-sm py-1">
+                                  <div className="w-2 h-2 rounded-full bg-amber-500" />
+                                  <span className="text-muted-foreground capitalize text-xs">{post.platform}</span>
+                                  <span className="text-xs text-muted-foreground truncate flex-1">
+                                    {post.caption}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          
+                          {card.pendingPosts.length === 0 && card.publishedPosts.length === 0 && (
+                            <div className="text-sm text-muted-foreground text-center py-2">
+                              No posts yet
+                            </div>
+                          )}
+                        </>
+                      )}
                     </div>
                   )}
 

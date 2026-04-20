@@ -16,7 +16,7 @@ import models
 import security
 import deps
 from database import Base, ENGINE as engine, SessionLocal as session_local
-from routers import auth, contact, users,workflows
+from routers import auth, contact, users,workflows,social_media
 
 
 # =========================
@@ -60,7 +60,7 @@ app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(contact.router)
 app.include_router(workflows.router)
-
+app.include_router(social_media.router)
 # =========================
 # STARTUP EVENTS
 # =========================

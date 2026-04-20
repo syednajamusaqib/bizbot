@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { GoogleOAuthProvider } from '@react-oauth/google';
 import { useState } from "react";
 
+
 // Components
 import ProtectedRoute from "@/components/auth/ProtectedRoute";
 import EntryScreen from "./pages/EntryScreen";
@@ -23,6 +24,8 @@ import AboutUs from "./pages/AboutUs";
 import ContactUs from "./pages/ContactUs";
 import AdminContactManagement from "./pages/AdminContactManagement";
 import UserWorkflows from "./pages/UserWorkflows";
+import PublicOnlyRoute from "@/components/auth/PublicOnlyRoute";
+import SocialMediaVerification from "./pages/SocialMediaVerification";
 
 const queryClient = new QueryClient();
 
@@ -46,9 +49,23 @@ const App = () => {
               <Route path="/" element={<EntryScreen />} />
               <Route path="/about" element={<AboutUs />} />
               <Route path="/contact" element={<ContactUs />} />
-              <Route path="/login" element={<Login setAuth={setIsAuthenticated} />} />
-              <Route path="/signup" element={<Signup setAuth={setIsAuthenticated} />} />
 
+              <Route 
+  path="/login" 
+  element={
+    <PublicOnlyRoute>
+      <Login setAuth={setIsAuthenticated} />
+    </PublicOnlyRoute>
+  } 
+/>
+<Route 
+  path="/signup" 
+  element={
+    <PublicOnlyRoute>
+      <Signup setAuth={setIsAuthenticated} />
+    </PublicOnlyRoute>
+  } 
+/>
               {/* Protected User Routes */}
               <Route element={<ProtectedRoute />}>
                 <Route path="/dashboard" element={<Dashboard isAuthenticated={isAuthenticated} />} />
@@ -66,6 +83,7 @@ const App = () => {
                 <Route path="/admin/contacts" element={<AdminContactManagement />} />
               </Route>
               <Route path="/user-workflows" element={<UserWorkflows />} />
+              <Route path="/social-media-verification" element={<SocialMediaVerification />} />
 
               <Route path="*" element={<NotFound />} />
             </Routes>
