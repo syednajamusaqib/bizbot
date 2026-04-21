@@ -2,7 +2,7 @@
 File Name: main.py
 Purpose: Initialize FastAPI application, configure middleware, mount static
          files, register routers, and handle startup tasks.
-Author: Najam U Saqib
+Author: Syed Najam 
 """
 
 import os
@@ -37,12 +37,18 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 # =========================
 # CORS CONFIGURATION
 # =========================
+# Allow dynamic frontend URL from environment variable, fallback to localhosts
+FRONTEND_URL = os.getenv("FRONTEND_URL", "")
+
 ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
     "http://localhost:8080",
     "http://127.0.0.1:8080",
 ]
+
+if FRONTEND_URL:
+    ALLOWED_ORIGINS.append(FRONTEND_URL)
 
 app.add_middleware(
     CORSMiddleware,
