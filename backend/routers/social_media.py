@@ -184,7 +184,7 @@ async def receive_from_make(
 
     # FIX: Select ONLY the user ID instead of the whole User object 
     # to prevent async MissingGreenlet lazy-loading errors.
-    result = await db.execute(select(User.id).where(User.email == request.request_email))
+    result = await db.execute(select(User.id).where(User.email == request.user_email))
     user_id = result.scalar_one_or_none()
     
     if not user_id:
